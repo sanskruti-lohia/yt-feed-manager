@@ -474,8 +474,8 @@ document.addEventListener("keydown", (e) => {
       policy.mode = changes.policy_mode.newValue || policy.mode;
 
       // Show labels when filtering is ON or in labels-only mode
-const overlayOn = policy.enabled || policy.mode === "labels";
-document.documentElement.classList.toggle("yt-shadow-on", overlayOn);
+      const overlayOn = policy.enabled || policy.mode === "labels";
+      document.documentElement.classList.toggle("yt-shadow-on", overlayOn);
 
       changed = true;
     }
@@ -1451,140 +1451,131 @@ document.documentElement.classList.toggle("yt-shadow-on", overlayOn);
 
   function shouldShowByPolicy(activeFilters, label, confidence, mode, strictMin, lenientMin) {
     if (label === "Unclassified") return true;
-    if (isLabelsOnly()) return true; // labels-only: always show
-
-    const inSet = activeFilters.includes(label);
-    let ok;
-    if (mode === "strict") {
-      ok = inSet && confidence >= strictMin;
-    } else {
-      // lenient: currently treat as "label matches" (conf ignored)
-      ok = inSet;
-    }
-
-    // step 2: filter semantics
-    if (policy.filterSemantics === "union") {
-      return ok; // any selected label passes
-    } else {
-      // intersection: require the tile's label to match ALL selected labels.
-      // with current single-label classifier, 2+ selections will effectively hide all.
-      if (Array.isArray(activeFilters) && activeFilters.length > 1) {
-        return activeFilters.every(f => f === label) && ok;
+  
+    // labels-only: filter by activeFilters (ignore confidence), respect union/intersection
+    if (mode === "labels") {
+      const inSet = activeFilters.includes(label);
+      if (policy.filterSemantics === "intersection") {
+        return activeFilters.length <= 1 ? inSet : activeFilters.every(f => f === label);
       }
-      return ok;
+      return inSet; // union
     }
+  
+    // strict / lenient
+    const inSet = activeFilters.includes(label);
+    const ok = (mode === "strict")
+      ? inSet && confidence >= strictMin
+      : inSet; // lenient ignores confidence
+  
+    if (policy.filterSemantics === "union") return ok;
+    if (Array.isArray(activeFilters) && activeFilters.length > 1) {
+      return activeFilters.every(f => f === label) && ok;
+    }
+    return ok;
+  }  
+
+const pendingHideTimers = new WeakMap();
+
+function applyDecisionToTile(tileEl, label, confidence) {
+  const outer = tileEl.closest(TILE_SEL) || tileEl;
+
+  const page_context = getPageContext();
+  const tile_kind = getTileKind(outer);
+
+  // filtering OFF → ensure visible and strip badges
+  if (!policy.enabled) {
+    outer.classList.remove("yf-dim", "yf-hide");
+    outer.removeAttribute("data-yt-hide");
+    outer.querySelectorAll('[data-yf-unclassified="1"], .yf-intent-badge, [data-yf-badge]').forEach(n => n.remove());
+    return;
+  }
+  if (!inScope(page_context, tile_kind, policy.scope)) {
+    // out of scope → ensure visible; still keep badges in shadow mode
+    outer.classList.remove("yf-dim", "yf-hide");
+    outer.removeAttribute("data-yt-hide");
+    return;
+  }
+  if (!outer) return;
+  // respect a one-time override
+  if (outer.getAttribute("data-yt-override") === "show-once") {
+    outer.classList.remove("yf-dim", "yf-hide");
+    outer.removeAttribute("data-yt-hide");
+    return;
   }
 
-  const pendingHideTimers = new WeakMap();
+  const show = shouldShowByPolicy(policy.activeFilters, label, Number(confidence || 0), policy.mode, policy.strictMin, policy.lenientMin);
 
-  function applyDecisionToTile(tileEl, label, confidence) {
-    const outer = tileEl.closest(TILE_SEL) || tileEl;
+  if (show) {
+    outer.classList.remove("yf-dim", "yf-hide");
+    outer.removeAttribute("data-yt-hide");
+    const t = pendingHideTimers.get(outer);
+    if (t) { clearTimeout(t); pendingHideTimers.delete(outer); }
+    return;
+  }
 
-    const page_context = getPageContext();
-    const tile_kind = getTileKind(outer);
+  // hide path
+  const tExisting = pendingHideTimers.get(outer);
+  if (tExisting) { clearTimeout(tExisting); pendingHideTimers.delete(outer); }
 
-    // filtering OFF → ensure visible and strip badges
-    if (!policy.enabled) {
-      outer.classList.remove("yf-dim", "yf-hide");
-      outer.removeAttribute("data-yt-hide");
-      outer.querySelectorAll('[data-yf-unclassified="1"], .yf-intent-badge, [data-yf-badge]').forEach(n => n.remove());
-      return;
-    }
-    if (!inScope(page_context, tile_kind, policy.scope)) {
-      // out of scope → ensure visible; still keep badges in shadow mode
-      outer.classList.remove("yf-dim", "yf-hide");
-      outer.removeAttribute("data-yt-hide");
-      return;
-    }
-    if (!outer) return;
+  // reflect debug attr if you want to keep it
 
-    // labels-only: keep every tile visible; we still write badges
-    if (isLabelsOnly()) {
-      // Show everything, but KEEP badges/attrs for the shadow overlay
-      outer.classList.remove("yf-dim", "yf-hide");
-      outer.removeAttribute("data-yt-hide");
-      return;
-    }
-    // respect a one-time override
-    if (outer.getAttribute("data-yt-override") === "show-once") {
-      outer.classList.remove("yf-dim", "yf-hide");
-      outer.removeAttribute("data-yt-hide");
-      return;
-    }
+  if (isAboveFold(outer)) {
+    // 1) dim now (no layout shift)
+    outer.classList.add("yf-dim");
+    outer.classList.remove("yf-hide");
 
-    const show = shouldShowByPolicy(policy.activeFilters, label, Number(confidence || 0), policy.mode, policy.strictMin, policy.lenientMin);
-
-    if (show) {
-      outer.classList.remove("yf-dim", "yf-hide");
-      outer.removeAttribute("data-yt-hide");
-      const t = pendingHideTimers.get(outer);
-      if (t) { clearTimeout(t); pendingHideTimers.delete(outer); }
-      return;
-    }
-
-    // hide path
-    const tExisting = pendingHideTimers.get(outer);
-    if (tExisting) { clearTimeout(tExisting); pendingHideTimers.delete(outer); }
-
-    // reflect debug attr if you want to keep it
-
-    if (isAboveFold(outer)) {
-      // 1) dim now (no layout shift)
-      outer.classList.add("yf-dim");
-      outer.classList.remove("yf-hide");
-
-      // 2) after ~0.5s, upgrade to hide
-      const delayMs = 500;
-      const tid = setTimeout(() => {
-        outer.classList.remove("yf-dim");
-        outer.classList.add("yf-hide");
-        // optional debug flag at *hide* moment only
-        outer.setAttribute("data-yt-hide", "1");
-        pendingHideTimers.delete(outer);
-      }, delayMs);
-      pendingHideTimers.set(outer, tid);
-    } else {
-      // offscreen — hide immediately
+    // 2) after ~0.5s, upgrade to hide
+    const delayMs = 500;
+    const tid = setTimeout(() => {
       outer.classList.remove("yf-dim");
       outer.classList.add("yf-hide");
-      // optional debug flag
+      // optional debug flag at *hide* moment only
       outer.setAttribute("data-yt-hide", "1");
-    }
+      pendingHideTimers.delete(outer);
+    }, delayMs);
+    pendingHideTimers.set(outer, tid);
+  } else {
+    // offscreen — hide immediately
+    outer.classList.remove("yf-dim");
+    outer.classList.add("yf-hide");
+    // optional debug flag
+    outer.setAttribute("data-yt-hide", "1");
   }
+}
 
 
-  function applyPolicyToAllLabeledTiles() {
-    document.querySelectorAll(TILE_SEL).forEach((tile) => {
-      const anchor =
-        tile.querySelector("#dismissible") ||
-        tile.querySelector("a#thumbnail") ||
-        tile.querySelector("#content") ||
-        tile;
-      const label =
-        anchor.getAttribute("data-intent-label") ||
-        tile.getAttribute("data-intent-label") ||
-        "Custom";
-      const conf = Number(
-        anchor.getAttribute("data-intent-confidence") ||
-        tile.getAttribute("data-intent-confidence") ||
-        0
-      );
-      if (label) applyDecisionToTile(tile, label, conf);
-    });
+function applyPolicyToAllLabeledTiles() {
+  document.querySelectorAll(TILE_SEL).forEach((tile) => {
+    const anchor =
+      tile.querySelector("#dismissible") ||
+      tile.querySelector("a#thumbnail") ||
+      tile.querySelector("#content") ||
+      tile;
+    const label =
+      anchor.getAttribute("data-intent-label") ||
+      tile.getAttribute("data-intent-label") ||
+      "Custom";
+    const conf = Number(
+      anchor.getAttribute("data-intent-confidence") ||
+      tile.getAttribute("data-intent-confidence") ||
+      0
+    );
+    if (label) applyDecisionToTile(tile, label, conf);
+  });
+}
+
+
+// Debug helper: allow manual badge write from page console
+window.__ytTiles_debugBadge = (sel, fullLabel) => {
+  try {
+    const el = document.querySelector(sel);
+    if (!el) return console.warn("[CT] __ytTiles_debugBadge: no element for", sel);
+    addOverlayBadgeToTile(el, fullLabel || "Learning - Academic Study");
+    console.log("[CT] __ytTiles_debugBadge wrote:", el);
+  } catch (e) {
+    console.error("[CT] __ytTiles_debugBadge error:", e);
   }
+};
 
 
-  // Debug helper: allow manual badge write from page console
-  window.__ytTiles_debugBadge = (sel, fullLabel) => {
-    try {
-      const el = document.querySelector(sel);
-      if (!el) return console.warn("[CT] __ytTiles_debugBadge: no element for", sel);
-      addOverlayBadgeToTile(el, fullLabel || "Learning - Academic Study");
-      console.log("[CT] __ytTiles_debugBadge wrote:", el);
-    } catch (e) {
-      console.error("[CT] __ytTiles_debugBadge error:", e);
-    }
-  };
-
-
-})();
+}) ();
