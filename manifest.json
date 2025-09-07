@@ -1,0 +1,66 @@
+{
+  "manifest_version": 3,
+
+  "name": "AI-Powered YouTube Intent Filter",
+  "version": "0.3.0",
+  "description": "Filters YouTube by your intent (Study/Info/Chill/Custom) using an LLM. Labels videos and hides non-matching tiles on demand.",
+
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+
+  "commands": {
+    "toggle_filter_on_off": {
+      "suggested_key": { "default": "Alt+Shift+F" },
+      "description": "Toggle filter on/off"
+    },
+    "toggle_strict_lenient": {
+      "suggested_key": { "default": "Alt+Shift+S" },
+      "description": "Toggle strict/lenient"
+    },
+    "toggle_union_intersection": {
+      "suggested_key": { "default": "Alt+Shift+U" },
+      "description": "Toggle union/intersection"
+    },
+        "toggle_force_dummy": {
+          "suggested_key": { "default": "Alt+Shift+D" },
+          "description": "Toggle classifier: force dummy vs LLM"
+        }
+  },
+
+  "action": {
+    "default_title": "YouTube Intent Filter",
+    "default_icon": {
+      "16": "icons/action16.png",
+      "32": "icons/action32.png"
+    },
+    "default_popup": "popup.html"
+  },
+
+  "options_page": "options.html",
+
+  "permissions": [
+    "storage",
+    "scripting",
+    "tabs"
+  ],
+  "host_permissions": [
+    "*://*.youtube.com/*"
+  ],
+
+  "content_scripts": [
+    {
+      "matches": ["*://*.youtube.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_start",
+      "all_frames": true
+    }
+  ],
+
+  "background": {
+    "service_worker": "background.js"
+  }
+}

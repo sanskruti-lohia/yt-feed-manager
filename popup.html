@@ -1,0 +1,37 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>YouTube Intent Filter</title>
+  <style>
+    body { min-width: 260px; font: 13px/1.4 system-ui,-apple-system,Segoe UI,Roboto,Arial; padding: 10px; }
+    button { width:100%; margin:6px 0; padding:8px 10px; }
+    .row { display:flex; align-items:center; gap:8px; margin-top:8px; }
+    .muted { color:#777; font-size:12px; }
+    #state { margin-top:8px; }
+  </style>
+</head>
+<body>
+  <button id="toggle">Filter: …</button>
+  <button id="mode">Mode: …</button>
+  <button id="sem">Semantics: …</button>
+  <button id="modal">Open Intent Picker</button>
+
+  <div id="state" class="muted">
+    <div>Enabled: <span id="sEnabled">—</span></div>
+    <div>Mode: <span id="sMode">—</span></div>
+    <div>Semantics: <span id="sSem">—</span></div>
+  </div>
+
+  <hr />
+  <div class="row">
+    <input id="forceDummy" type="checkbox" />
+    <label for="forceDummy">Force dummy (ignore API key)</label>
+  </div>
+  <button id="save">Save</button>
+
+  <hr />
+  <a href="options.html" target="_blank">Options (Provider & Key)</a>
+  <script src="popup.js"></script>
+</body>
+</html>
